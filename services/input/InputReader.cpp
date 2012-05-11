@@ -972,7 +972,7 @@ void InputDevice::process(const RawEvent* rawEvents, size_t count) {
                 z_data = rawEvent->value;
                 touched = (0 != z_data);
             }
-            else if (rawEvent->scanCode == ABS_MT_POSITION_Y) {
+            else if (rawEvent->scanCode == ABS_MT_POSITION_Y && rawEvent->type != EV_KEY) {
 
                 RawEvent event;
                 memset(&event, 0, sizeof(event));
@@ -1005,7 +1005,7 @@ void InputDevice::process(const RawEvent* rawEvents, size_t count) {
                     mapper->process(&event);
                 }
 
-                LOGD("Fake event sent, touch=%d !", touched);
+                //ALOGD("Fake event sent, touch=%d !", touched);
             }
             else
 #endif //LEGACY_TOUCHSCREEN
@@ -2318,6 +2318,16 @@ void CursorInputMapper::sync(nsecs_t when) {
     if ((buttonsPressed || moved || scrolled) && getDevice()->isExternal()) {
         policyFlags |= POLICY_FLAG_WAKE_DROPPED;
     }
+
+#ifdef LEGACY_TRACKPAD
+    // Hack to allow legacy trackpads to wake the device (and provide a toggle)
+    // all input events are either WAKE (1) or WAKE_DROPPED (2) but not both. in this
+    // special case we OR both flags together to produce an (3) which
+    // no input event will ever have besides this one (because its just wrong)
+    if (buttonsPressed && !getDevice()->isExternal()) {
+        policyFlags |= (POLICY_FLAG_WAKE | POLICY_FLAG_WAKE_DROPPED);
+    }
+#endif
 
     // Synthesize key down from buttons if needed.
     synthesizeButtonKeys(getContext(), AKEY_EVENT_ACTION_DOWN, when, getDeviceId(), mSource,

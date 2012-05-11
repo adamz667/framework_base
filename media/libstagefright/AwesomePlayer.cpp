@@ -686,18 +686,20 @@ void AwesomePlayer::onBufferingUpdate() {
         return;
     }
     mBufferingEventPending = false;
+    bool cacheFull = false;
 
     if (mCachedSource != NULL) {
         status_t finalStatus;
         size_t cachedDataRemaining = mCachedSource->approxDataRemaining(&finalStatus);
         bool eos = (finalStatus != OK);
+        cacheFull = mCachedSource->isCacheFull();
 
         if (eos) {
             if (finalStatus == ERROR_END_OF_STREAM) {
                 notifyListener_l(MEDIA_BUFFERING_UPDATE, 100);
             }
             if (mFlags & PREPARING) {
-                LOGV("cache has reached EOS, prepare is done.");
+                LOGI("cache has reached EOS, prepare is done.");
                 finishAsyncPrepare_l();
             }
         } else {
@@ -725,7 +727,7 @@ void AwesomePlayer::onBufferingUpdate() {
                     ensureCacheIsFetching_l();
                     sendCacheStats();
                     notifyListener_l(MEDIA_INFO, MEDIA_INFO_BUFFERING_START);
-                } else if (eos || cachedDataRemaining > kHighWaterMarkBytes) {
+                } else if (eos || cachedDataRemaining > kHighWaterMarkBytes || cacheFull) {
                     if (mFlags & CACHE_UNDERRUN) {
                         LOGI("cache has filled up (> %d), resuming.",
                              kHighWaterMarkBytes);
@@ -781,7 +783,7 @@ void AwesomePlayer::onBufferingUpdate() {
             ensureCacheIsFetching_l();
             sendCacheStats();
             notifyListener_l(MEDIA_INFO, MEDIA_INFO_BUFFERING_START);
-        } else if (eos || cachedDurationUs > kHighWaterMarkUs) {
+        } else if (eos || cachedDurationUs > kHighWaterMarkUs || cacheFull) {
             if (mFlags & CACHE_UNDERRUN) {
                 LOGI("cache has filled up (%.2f secs), resuming.",
                      cachedDurationUs / 1E6);
@@ -2301,6 +2303,16 @@ void AwesomePlayer::onPrepareAsyncEvent() {
     modifyFlags(PREPARING_CONNECTED, SET);
 
     if (isStreamingHTTP()) {
+
+        //Set the max interleaving offset for HTTP Caching source.
+        //This is required only for clips with audio & video
+        if (mCachedSource != NULL && mVideoSource != NULL && mAudioSource != NULL) {
+            int64_t bitrate = 0;
+            if( getBitrate( &bitrate ) ) {
+                //considering that Audio Video can be apart by 0.3 secs
+                mCachedSource->setAVInterleavingOffset( bitrate/3 );
+            }
+        }
         postBufferingEvent_l();
     } else {
         finishAsyncPrepare_l();
@@ -2550,3 +2562,4 @@ inline int64_t AwesomePlayer::getTimeOfDayUs() {
     return (int64_t)tv.tv_sec * 1000000 + tv.tv_usec;
 }
 }  // namespace android
+

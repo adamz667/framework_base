@@ -19,6 +19,8 @@ package android.media;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.app.PendingIntent;
+//import android.app.ProfileGroup;
+//import android.app.ProfileManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -54,6 +56,7 @@ public class AudioManager {
     private int  mVolumeControlStream = -1;
     private static String TAG = "AudioManager";
     private static boolean localLOGV = false;
+//    private final ProfileManager mProfileManager;
 
     /**
      * Broadcast intent, a hint for applications that audio is about to become
@@ -360,6 +363,7 @@ public class AudioManager {
     public AudioManager(Context context) {
         mContext = context;
         mHandler = new Handler(context.getMainLooper());
+        //mProfileManager = (ProfileManager) context.getSystemService(Context.PROFILE_SERVICE);
     }
 
     private static IAudioService getService()
@@ -417,7 +421,7 @@ public class AudioManager {
                         flags);
                 break;
             case KeyEvent.KEYCODE_VOLUME_MUTE:
-                // TODO: Actually handle MUTE.
+                toggleMute(stream);
                 break;
         }
     }
@@ -446,9 +450,31 @@ public class AudioManager {
                 mVolumeKeyUpTime = SystemClock.uptimeMillis();
                 break;
             case KeyEvent.KEYCODE_VOLUME_MUTE:
-                // TODO: Actually handle MUTE.
                 break;
         }
+    }
+
+    /**
+     * Toggles global mute state via ringer mode.
+     * @param stream The stream for which the volume panel will be shown.
+     * @hide
+     */
+    public void toggleMute(int stream) {
+        boolean vibrate = getVibrateSetting(
+                AudioManager.VIBRATE_TYPE_RINGER)
+                        == AudioManager.VIBRATE_SETTING_ON;
+
+        int currentMode = getRingerMode();
+
+        if (vibrate && currentMode == AudioManager.RINGER_MODE_VIBRATE
+                || currentMode == AudioManager.RINGER_MODE_SILENT) {
+            setRingerMode(AudioManager.RINGER_MODE_NORMAL);
+        } else {
+            setRingerMode(vibrate ? AudioManager.RINGER_MODE_VIBRATE
+                    : AudioManager.RINGER_MODE_SILENT);
+        }
+
+        adjustSuggestedStreamVolume(ADJUST_SAME, stream, FLAG_SHOW_UI | FLAG_VIBRATE);
     }
 
     /**
@@ -751,6 +777,26 @@ public class AudioManager {
      * @see #getVibrateSetting(int)
      */
     public boolean shouldVibrate(int vibrateType) {
+        String packageName = mContext.getPackageName();
+        // Don't apply profiles for "android" context, as these could
+        // come from the NotificationManager, and originate from a real package.
+        /*if (!packageName.equals("android")) {
+            ProfileGroup profileGroup = mProfileManager.getActiveProfileGroup(packageName);
+            if (profileGroup != null) {
+                Log.v(TAG, "shouldVibrate, group: " + profileGroup.getUuid()
+                        + " mode: " + profileGroup.getVibrateMode());
+                switch (profileGroup.getVibrateMode()) {
+                    case OVERRIDE :
+                        return true;
+                    case SUPPRESS :
+                        return false;
+                    case DEFAULT :
+                        // Drop through
+                }
+            }
+        } else {
+            Log.v(TAG, "Not applying override for 'android' package");
+        }*/
         IAudioService service = getService();
         try {
             return service.shouldVibrate(vibrateType);

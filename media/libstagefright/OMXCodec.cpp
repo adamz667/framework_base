@@ -1855,7 +1855,10 @@ status_t OMXCodec::setVideoOutputFormat(
 #endif
                );
 #ifdef SAMSUNG_CODEC_SUPPORT
-        if (!strncmp("OMX.SEC.", mComponentName, 8)) {
+        if (!strcmp("OMX.SEC.FP.AVC.Decoder", mComponentName) ||
+            !strcmp("OMX.SEC.AVC.Decoder", mComponentName) ||
+            !strcmp("OMX.SEC.MPEG4.Decoder", mComponentName) ||
+            !strcmp("OMX.SEC.H263.Decoder", mComponentName)) {
             if (mNativeWindow == NULL)
                 format.eColorFormat = OMX_COLOR_FormatYUV420Planar;
             else
@@ -1884,9 +1887,8 @@ status_t OMXCodec::setVideoOutputFormat(
 
     CHECK_EQ(err, (status_t)OK);
 
-#ifdef EXYNOS4210_ENHANCEMENTS
-    const size_t X = 64 * 8 * 1024;  // const size_t X = 64 * 1024;
-#else
+#if 1
+    // XXX Need a (much) better heuristic to compute input buffer sizes.
     const size_t X = 64 * 1024;
     if (def.nBufferSize < X) {
         def.nBufferSize = X;

@@ -859,7 +859,7 @@ public class PowerManagerService extends IPowerManager.Stub
             switch (wl.flags & LOCK_MASK)
             {
                 case PowerManager.FULL_WAKE_LOCK:
-                    if (mUseSoftwareAutoBrightness) {
+                    if (mAutoBrightessEnabled) {
                         wl.minState = SCREEN_BRIGHT;
                     } else {
                         wl.minState = (mKeyboardVisible ? ALL_BRIGHT : SCREEN_BUTTON_BRIGHT);
@@ -2330,6 +2330,8 @@ public class PowerManagerService extends IPowerManager.Stub
         }
         if (mButtonBrightnessOverride >= 0) {
             brightness = mButtonBrightnessOverride;
+        } else if (!mAutoBrightessEnabled) {
+            brightness = getPreferredBrightness();
         } else if (mLightSensorButtonBrightness >= 0 && mUseSoftwareAutoBrightness) {
             brightness = mLightSensorButtonBrightness;
         }
@@ -2352,6 +2354,8 @@ public class PowerManagerService extends IPowerManager.Stub
             brightness = 0;
         } else if (mButtonBrightnessOverride >= 0) {
             brightness = mButtonBrightnessOverride;
+        } else if (!mAutoBrightessEnabled && mKeyboardVisible) {
+            brightness = getPreferredBrightness();
         } else if (mLightSensorKeyboardBrightness >= 0 && mUseSoftwareAutoBrightness) {
             brightness =  mLightSensorKeyboardBrightness;
         }
@@ -2477,7 +2481,7 @@ public class PowerManagerService extends IPowerManager.Stub
                 if ((mUserActivityAllowed && !mProximitySensorActive) || force) {
                     // Only turn on button backlights if a button was pressed
                     // and auto brightness is disabled
-                    if (eventType == BUTTON_EVENT && !mUseSoftwareAutoBrightness) {
+                    if (eventType == BUTTON_EVENT && !mAutoBrightessEnabled) {
                         mUserState = (mKeyboardVisible ? ALL_BRIGHT : SCREEN_BUTTON_BRIGHT);
                     } else {
                         // don't clear button/keyboard backlights when the screen is touched.
@@ -2733,7 +2737,7 @@ public class PowerManagerService extends IPowerManager.Stub
                 // we only do this if we are undocked, since lighting should be stable when
                 // stationary in a dock.
                 int lcdValue = getAutoBrightnessValue(
-                        (mIsDocked ? value : mHighestLightSensorValue),
+                        (!mIsDocked ? value : mHighestLightSensorValue),
                         mLastLcdValue,
                         (mCustomLightEnabled ? mCustomLightLevels : mAutoBrightnessLevels),
                         (mCustomLightEnabled ? mCustomLcdValues : mLcdBacklightValues));
@@ -2905,6 +2909,7 @@ public class PowerManagerService extends IPowerManager.Stub
                 // will take care of turning on due to a true change to the lid
                 // switch and synchronized with the lock screen.
                 if ((mPowerState & SCREEN_ON_BIT) != 0) {
+                  if (mSpew) Slog.w(TAG, "mKeyboardVisible:" + mKeyboardVisible + " mAutoBrightessEnabled: " + mAutoBrightessEnabled + " mUseSoftwareAutoBrightness:" + mUseSoftwareAutoBrightness + " mLightSensorValue:" + mLightSensorValue);    
                     if (mUseSoftwareAutoBrightness) {
                         // force recompute of backlight values
                         if (mLightSensorValue >= 0) {
@@ -2912,9 +2917,15 @@ public class PowerManagerService extends IPowerManager.Stub
                             mLightSensorValue = -1;
                             lightSensorChangedLocked(value);
                             lightFilterReset((int)mLightSensorValue);
+                        } else {
+                            updateLightsLocked(mPowerState, LIGHTS_MASK);
                         }
                     }
                     userActivity(SystemClock.uptimeMillis(), false, BUTTON_EVENT, true);
+                }
+                else if (!visible) {
+                    if (mSpew) Slog.w(TAG, "keyboard not visible, turning off");
+                    mKeyboardLight.turnOff();
                 }
             }
         }
@@ -3239,7 +3250,7 @@ public class PowerManagerService extends IPowerManager.Stub
         // wait until sensors are enabled before turning on screen.
         // some devices will not activate the light sensor properly on boot
         // unless we do this.
-        if (mUseSoftwareAutoBrightness) {
+        if (mAutoBrightessEnabled) {
             // turn the screen on
             setPowerState(SCREEN_BRIGHT);
         } else {

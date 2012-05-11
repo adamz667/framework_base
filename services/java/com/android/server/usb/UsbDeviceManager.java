@@ -179,9 +179,15 @@ public class UsbDeviceManager {
         StorageManager storageManager = (StorageManager)
                 mContext.getSystemService(Context.STORAGE_SERVICE);
         StorageVolume[] volumes = storageManager.getVolumeList();
+
         if (volumes.length > 0) {
-            massStorageSupported = volumes[0].allowMassStorage();
+            if (Settings.Secure.getInt(mContentResolver, Settings.Secure.USB_MASS_STORAGE_ENABLED, 0) == 1 ) {
+                massStorageSupported = volumes[0].allowMassStorage();
+            } else {
+                massStorageSupported = false;
+            }
         }
+
         mUseUsbNotification = !massStorageSupported;
 
         // make sure the ADB_ENABLED setting value matches the current state
@@ -309,14 +315,6 @@ public class UsbDeviceManager {
                 mContentResolver.registerContentObserver(
                         Settings.Secure.getUriFor(Settings.Secure.ADB_ENABLED),
                                 false, new AdbSettingsObserver());
-                
-                mContentResolver.registerContentObserver(
-                        Settings.Secure.getUriFor(Settings.Secure.ADB_ICON),
-                                false, new ContentObserver(null) {
-                        public void onChange(boolean selfChange) {
-                            updateAdbNotification();
-                        }
-                });
 
                 // Watch for USB configuration changes
                 mUEventObserver.startObserving(USB_STATE_MATCH);
@@ -573,10 +571,10 @@ public class UsbDeviceManager {
                     id = com.android.internal.R.string.usb_mtp_notification_title;
                 } else if (containsFunction(mCurrentFunctions, UsbManager.USB_FUNCTION_PTP)) {
                     id = com.android.internal.R.string.usb_ptp_notification_title;
-                } else if (containsFunction(mCurrentFunctions,
-                        UsbManager.USB_FUNCTION_MASS_STORAGE)) {
-                    id = com.android.internal.R.string.usb_cd_installer_notification_title;
-                } else if (containsFunction(mCurrentFunctions, UsbManager.USB_FUNCTION_ACCESSORY)) {
+                } /* else if (containsFunction(mCurrentFunctions,
+                     UsbManager.USB_FUNCTION_MASS_STORAGE)) { // Disable this as it causes double USB settings menues when in UMS mode.
+                     id = com.android.internal.R.string.usb_cd_installer_notification_title; 
+                     } */ else if (containsFunction(mCurrentFunctions, UsbManager.USB_FUNCTION_ACCESSORY)) {
                     id = com.android.internal.R.string.usb_accessory_notification_title;
                 } else {
                     // There is a different notification for USB tethering so we don't need one here
@@ -620,10 +618,8 @@ public class UsbDeviceManager {
         private void updateAdbNotification() {
             if (mNotificationManager == null) return;
             final int id = com.android.internal.R.string.adb_active_notification_title;
-            if (mAdbEnabled && mConnected &&
-                    !"0".equals(SystemProperties.get("persist.adb.notify")) &&
-                    Settings.Secure.getInt(mContext.getContentResolver(),
-                    Settings.Secure.ADB_ICON, 1) == 1) {
+            if (mAdbEnabled && mConnected) {
+                if ("0".equals(SystemProperties.get("persist.adb.notify"))) return;
 
                 if (!mAdbNotificationShown) {
                     Resources r = mContext.getResources();
